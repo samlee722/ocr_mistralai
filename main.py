@@ -21,36 +21,39 @@ class BusinessCardInfo(BaseModel):
     phone: Optional[str] = Field(None, description="Phone number")
     email: Optional[str] = Field(None, description="Email address")
 
+def encode_image(image_bytes: bytes) -> str:
+    """Encode image bytes to base64."""
+    return base64.b64encode(image_bytes).decode('utf-8')
+
 @app.post("/ocr/business-card", response_model=BusinessCardInfo)
 async def extract_business_card(file: UploadFile = File(...)):
-    """
-    Extract business card information using Mistral OCR
-    """
     try:
-        # Check file type
         if not file.content_type.startswith("image/"):
             raise HTTPException(status_code=400, detail="Only image files are supported")
         
         # Read file content
         content = await file.read()
         
-        # Convert to base64
-        base64_image = base64.b64encode(content).decode('utf-8')
-        image_data_url = f"data:{file.content_type};base64,{base64_image}"
+        # Encode image to base64
+        base64_image = encode_image(content)
         
-        # First, get OCR text from the image
+        # Determine image type from content_type
+        image_type = file.content_type.split('/')[-1]  # e.g., 'jpeg', 'png'
+        
+        # Use OCR API with base64 encoded image
         ocr_response = mistral_client.ocr.process(
             model="mistral-ocr-latest",
             document={
-                "type": "document_url",
-                "document_url": image_data_url
-            }
+                "type": "image_url",
+                "image_url": f"data:image/{image_type};base64,{base64_image}"
+            },
+            include_image_base64=True
         )
         
-        # Extract text content
+        # Extract text from response
         ocr_text = ocr_response.content if hasattr(ocr_response, 'content') else str(ocr_response)
         
-        # Use chat completion to extract structured information
+        # Create prompt for structured extraction
         prompt = f"""Extract business card information from the following text.
 Return a JSON object with these fields:
 - company: Company or organization name
@@ -65,7 +68,8 @@ Text from business card:
 {ocr_text}
 
 Return only valid JSON, no additional text."""
-
+        
+        # Use chat API to extract structured information
         chat_response = mistral_client.chat.complete(
             model="mistral-large-latest",
             messages=[{"role": "user", "content": prompt}],
@@ -75,7 +79,7 @@ Return only valid JSON, no additional text."""
         # Parse the JSON response
         extracted_data = json.loads(chat_response.choices[0].message.content)
         
-        # Create BusinessCardInfo object
+        # Create and return BusinessCardInfo
         business_card_info = BusinessCardInfo(**extracted_data)
         
         return business_card_info
@@ -84,7 +88,6 @@ Return only valid JSON, no additional text."""
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-
 
 @app.get("/")
 async def root():
