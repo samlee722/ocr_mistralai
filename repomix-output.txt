@@ -1,0 +1,456 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where comments have been removed, empty lines have been removed.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: *.env, .env, pdfs/, xlsx/, db/, */db/
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Code comments have been removed from supported file types
+- Empty lines have been removed from all files
+</notes>
+
+<additional_info>
+
+</additional_info>
+
+</file_summary>
+
+<directory_structure>
+main_regex.py
+main.py
+README.md
+requirements.txt
+test_api.py
+test_with_sample.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="main_regex.py">
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from mistralai import Mistral
+import base64
+import os
+import re
+from typing import Optional
+from dotenv import load_dotenv
+load_dotenv()
+app = FastAPI(title="Business Card OCR API - Regex Version")
+mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
+class BusinessCardInfo(BaseModel):
+    company: Optional[str] = None
+    position: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+@app.post("/ocr/business-card", response_model=BusinessCardInfo)
+async def extract_business_card(file: UploadFile = File(...)):
+    import tempfile
+    import uuid
+    try:
+        if not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Only image files are supported")
+        content = await file.read()
+        base64_image = base64.b64encode(content).decode('utf-8')
+        # Use Mistral's chat API with vision capability for OCR
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Please extract all text from this business card image. Return only the text content, preserving the layout as much as possible."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": f"data:{file.content_type};base64,{base64_image}"
+                    }
+                ]
+            }
+        ]
+        chat_response = mistral_client.chat.complete(
+            model="pixtral-12b-2024-09-04",  # Vision-capable model
+            messages=messages
+        )
+        # Extract text from response
+        extracted_text = chat_response.choices[0].message.content
+        # Parse business card information using regex
+        business_card_info = extract_info_from_text(extracted_text)
+        return business_card_info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+def extract_info_from_text(text: str) -> BusinessCardInfo:
+    info = BusinessCardInfo()
+    # Convert text to lines for easier processing
+    lines = text.split('\n')
+    # Email pattern
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    # Phone pattern (Korean and international formats)
+    phone_patterns = [
+        r'(?:010|011|016|017|018|019)[-.\s]?\d{3,4}[-.\s]?\d{4}',  # Korean mobile
+        r'0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}',  # Korean landline
+        r'\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}',  # International Korean
+        r'\d{3}[-.\s]?\d{3,4}[-.\s]?\d{4}',  # General format
+        r'\(\d{2,3}\)[-.\s]?\d{3,4}[-.\s]?\d{4}',  # With area code
+        r'\+1[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'  # US format
+    ]
+    # Common position keywords
+    position_keywords = [
+        '대표', '이사', '부장', '차장', '과장', '대리', '사원', '주임',
+        'CEO', 'CTO', 'CFO', 'COO', 'CMO', 'Director', 'Manager',
+        'Engineer', 'Developer', 'Designer', 'Consultant', 'Representative',
+        '팀장', '실장', '본부장', '센터장', '소장', '원장', '회장', '사장',
+        'Senior', 'Junior', 'Lead', 'Principal', 'Staff', 'Head'
+    ]
+    # Company keywords (often followed by company name)
+    company_indicators = ['(주)', '주식회사', '㈜', 'Inc.', 'Corp.', 'Co.', 'Ltd.', 'LLC', 'Company']
+    # Extract email
+    for line in lines:
+        email_match = re.search(email_pattern, line)
+        if email_match:
+            info.email = email_match.group()
+            break
+    # Extract phone
+    for line in lines:
+        for pattern in phone_patterns:
+            phone_match = re.search(pattern, line)
+            if phone_match:
+                info.phone = phone_match.group()
+                break
+        if info.phone:
+            break
+    # Extract position
+    for line in lines:
+        for keyword in position_keywords:
+            if keyword.lower() in line.lower():
+                info.position = line.strip()
+                break
+        if info.position:
+            break
+    # Extract company
+    for line in lines:
+        for indicator in company_indicators:
+            if indicator in line:
+                info.company = line.strip()
+                break
+        if info.company:
+            break
+    # Extract name (heuristic: often the largest text or first non-company line)
+    # This is simplified - in production, you might use more sophisticated logic
+    for line in lines:
+        line = line.strip()
+        if line and not info.email and not info.phone:
+            # Skip if it's likely company or position
+            if not any(indicator in line for indicator in company_indicators):
+                if not any(keyword in line.lower() for keyword in position_keywords):
+                    if not re.search(email_pattern, line) and not any(re.search(p, line) for p in phone_patterns):
+                        if (2 <= len(line) <= 10) or (len(line.split()) >= 2 and len(line.split()) <= 4):
+                            info.name = line
+                            break
+    return info
+@app.get("/")
+async def root():
+    return {"message": "Business Card OCR API - Regex Version", "endpoint": "/ocr/business-card"}
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
+</file>
+
+<file path="main.py">
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from mistralai import Mistral
+import base64
+import os
+import json
+from typing import Optional
+from dotenv import load_dotenv
+load_dotenv()
+app = FastAPI(title="Business Card OCR API")
+mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
+class BusinessCardInfo(BaseModel):
+    company: Optional[str] = Field(None, description="Company or organization name")
+    position: Optional[str] = Field(None, description="Job title or position")
+    name: Optional[str] = Field(None, description="Person's full name")
+    phone: Optional[str] = Field(None, description="Phone number")
+    email: Optional[str] = Field(None, description="Email address")
+@app.post("/ocr/business-card", response_model=BusinessCardInfo)
+async def extract_business_card(file: UploadFile = File(...)):
+    try:
+        if not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Only image files are supported")
+        content = await file.read()
+        base64_image = base64.b64encode(content).decode('utf-8')
+        image_data_url = f"data:{file.content_type};base64,{base64_image}"
+        ocr_response = mistral_client.ocr.process(
+            model="mistral-ocr-latest",
+            document={
+                "type": "document_url",
+                "document_url": image_data_url
+            }
+        )
+        ocr_text = ocr_response.content if hasattr(ocr_response, 'content') else str(ocr_response)
+        prompt = f"""Extract business card information from the following text.
+Return a JSON object with these fields:
+- company: Company or organization name
+- position: Job title or position
+- name: Person's full name
+- phone: Phone number
+- email: Email address
+If any field is not found, use null.
+Text from business card:
+{ocr_text}
+Return only valid JSON, no additional text."""
+        chat_response = mistral_client.chat.complete(
+            model="mistral-large-latest",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        extracted_data = json.loads(chat_response.choices[0].message.content)
+        business_card_info = BusinessCardInfo(**extracted_data)
+        return business_card_info
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+@app.get("/")
+async def root():
+    return {"message": "Business Card OCR API", "endpoint": "/ocr/business-card"}
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+</file>
+
+<file path="README.md">
+# Business Card OCR API
+
+FastAPI server that extracts business card information using Mistral OCR.
+
+## Setup
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+2. Create `.env` file:
+```bash
+cp .env.example .env
+```
+
+3. Add your Mistral API key to `.env`
+
+4. Run the server:
+```bash
+uvicorn main:app --reload
+```
+
+## API Endpoints
+
+- `POST /ocr/business-card`: Upload business card image to extract information
+- `GET /`: API info
+- `GET /health`: Health check
+
+## Response Format
+
+```json
+{
+  "company": "Company Name",
+  "position": "Job Title",
+  "name": "Person Name",
+  "phone": "Phone Number",
+  "email": "email@example.com"
+}
+```
+</file>
+
+<file path="requirements.txt">
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+mistralai==0.1.8
+python-dotenv==1.0.1
+python-multipart==0.0.12
+requests==2.32.3
+pillow==10.4.0
+</file>
+
+<file path="test_api.py">
+import requests
+import os
+from pathlib import Path
+BASE_URL = "http://localhost:8001"
+UPLOAD_ENDPOINT = f"{BASE_URL}/ocr/business-card"
+def test_business_card_ocr():
+    example_file = Path("1.jpg")
+    if not example_file.exists():
+        print("Error: example.png not found in current directory")
+        print("Please add a business card image named 'example.png' to test")
+        return
+    with open(example_file, "rb") as f:
+        files = {"file": ("example.png", f, "image/png")}
+        try:
+            print(f"Sending request to {UPLOAD_ENDPOINT}...")
+            response = requests.post(UPLOAD_ENDPOINT, files=files)
+            if response.status_code == 200:
+                print("\n✅ Success! Business card information extracted:")
+                print("-" * 50)
+                data = response.json()
+                for field, value in data.items():
+                    if value:
+                        print(f"{field.capitalize()}: {value}")
+                print("-" * 50)
+                return data
+            else:
+                print(f"\n❌ Error: {response.status_code}")
+                print(f"Response: {response.text}")
+        except requests.exceptions.ConnectionError:
+            print("\n❌ Connection Error: Make sure the server is running!")
+            print("Run: uvicorn main:app --reload")
+        except Exception as e:
+            print(f"\n❌ Unexpected error: {str(e)}")
+def test_health_check():
+    try:
+        response = requests.get(f"{BASE_URL}/health")
+        if response.status_code == 200:
+            print("✅ Health check passed")
+        else:
+            print("❌ Health check failed")
+    except:
+        print("❌ Cannot connect to server")
+if __name__ == "__main__":
+    print("🔍 Testing Business Card OCR API")
+    print("=" * 50)
+    test_health_check()
+    print()
+    test_business_card_ocr()
+</file>
+
+<file path="test_with_sample.py">
+import requests
+import base64
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+import os
+BASE_URL = "http://localhost:8000"
+UPLOAD_ENDPOINT = f"{BASE_URL}/ocr/business-card"
+def create_sample_business_card():
+    width, height = 600, 350
+    img = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(img)
+    try:
+        font_large = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 36)
+        font_medium = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
+        font_small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 18)
+    except:
+        font_large = ImageFont.load_default()
+        font_medium = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+    y_offset = 40
+    draw.text((50, y_offset), "TechCorp Inc.", fill='black', font=font_large)
+    y_offset += 60
+    draw.text((50, y_offset), "John Smith", fill='black', font=font_medium)
+    y_offset += 40
+    draw.text((50, y_offset), "Senior Software Engineer", fill='gray', font=font_small)
+    y_offset += 40
+    draw.text((50, y_offset), "john.smith@techcorp.com", fill='black', font=font_small)
+    y_offset += 30
+    draw.text((50, y_offset), "+1 (555) 123-4567", fill='black', font=font_small)
+    draw.rectangle([10, 10, width-10, height-10], outline='gray', width=2)
+    img.save("example.png")
+    print("✅ Created sample business card: example.png")
+    return img
+def test_with_generated_card():
+    if not os.path.exists("example.png"):
+        print("📝 Creating sample business card...")
+        create_sample_business_card()
+    # Test the API
+    with open("example.png", "rb") as f:
+        files = {"file": ("example.png", f, "image/png")}
+        try:
+            print(f"\n🚀 Sending request to {UPLOAD_ENDPOINT}...")
+            response = requests.post(UPLOAD_ENDPOINT, files=files)
+            if response.status_code == 200:
+                print("\n✅ Success! Extracted information:")
+                print("-" * 50)
+                data = response.json()
+                expected = {
+                    "company": "TechCorp Inc.",
+                    "position": "Senior Software Engineer",
+                    "name": "John Smith",
+                    "phone": "+1 (555) 123-4567",
+                    "email": "john.smith@techcorp.com"
+                }
+                for field, expected_value in expected.items():
+                    actual_value = data.get(field)
+                    status = "✅" if actual_value else "❌"
+                    print(f"{status} {field.capitalize()}: {actual_value or 'Not found'}")
+                    if expected_value and actual_value:
+                        print(f"   Expected: {expected_value}")
+                print("-" * 50)
+                return data
+            else:
+                print(f"\n❌ Error: {response.status_code}")
+                print(f"Response: {response.text}")
+        except requests.exceptions.ConnectionError:
+            print("\n❌ Connection Error: Server is not running!")
+            print("Please run: uvicorn main:app --reload")
+        except Exception as e:
+            print(f"\n❌ Unexpected error: {str(e)}")
+if __name__ == "__main__":
+    print("🧪 Business Card OCR API Test")
+    print("=" * 50)
+    try:
+        health = requests.get(f"{BASE_URL}/health")
+        if health.status_code == 200:
+            print("✅ Server is running")
+            test_with_generated_card()
+        else:
+            print("❌ Server health check failed")
+    except:
+        print("❌ Server is not running!")
+        print("\nTo start the server:")
+        print("1. Create .env file with MISTRAL_API_KEY")
+        print("2. Run: uvicorn main:app --reload")
+</file>
+
+</files>
