@@ -1,0 +1,14 @@
+{
+  "request_id": "54429cfb-4b23-43a9-9b30-4297b6e0f396",
+  "timestamp": 1749109501.6887722,
+  "file_name": "1.JPG",
+  "ocr_text": "pages=[OCRPageObject(index=0, markdown='# 김 양 수 대표 \\n\\n## WEALTHEDU\\n\\nPremium Financial Education\\n(주) 웰스에듀\\n(06621) 서울시 서초구 서초대로74길 23 서초타운트라팰리스 607 호\\nM 01052348957 T 025668957 F 025648957\\nceo@wealthedu.co.kr\\nwww.wealthedu.kr', images=[], dimensions=OCRPageDimensions(dpi=200, height=4284, width=5712))] model='mistral-ocr-2505-completion' usage_info=OCRUsageInfo(pages_processed=1, doc_size_bytes=4509144) document_annotation=None",
+  "extracted_data": {
+    "company": "(주) 웰스에듀",
+    "position": "대표",
+    "name": "김 양 수",
+    "phone": "01052348957",
+    "email": "ceo@wealthedu.co.kr"
+  },
+  "processing_time_ms": 96796.67
+}

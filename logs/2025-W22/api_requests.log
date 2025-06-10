@@ -1,0 +1,1 @@
+2025-06-05 16:43:24 | INFO     | logger:log_api_request:70 - {"timestamp": "2025-06-05T16:43:24.892894", "request_id": "54429cfb-4b23-43a9-9b30-4297b6e0f396", "endpoint": "/ocr/business-card", "method": "POST", "client_ip": "127.0.0.1", "file_name": "1.JPG", "file_size_mb": 4.3, "content_type": "image/jpeg"}

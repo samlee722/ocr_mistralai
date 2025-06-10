@@ -24,7 +24,7 @@ import json
 from typing import Optional, Dict, Any
 
 # Configuration
-BASE_URL = "http://localhost:8001"  # Change to 8001 for regex version
+BASE_URL = "http://localhost:8000"  # Change to 8001 for regex version
 UPLOAD_ENDPOINT = f"{BASE_URL}/ocr/business-card"
 
 def extract_google_drive_id(url: str) -> Optional[str]:
