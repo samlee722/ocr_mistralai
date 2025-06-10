@@ -1,1 +1,0 @@
-2025-06-05 16:45:01 | INFO     | logger:log_app_response:80 - {"timestamp": "2025-06-05T16:45:01.689402", "request_id": "54429cfb-4b23-43a9-9b30-4297b6e0f396", "response_status": "success", "response_file": "response_54429cfb-4b23-43a9-9b30-4297b6e0f396.json", "processing_time_ms": 96796.67, "extracted_fields": 5}

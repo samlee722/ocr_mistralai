@@ -1,3 +1,8 @@
 ﻿.env
 cursor_role.md
 repomix-output.txt
+*.JPG
+*_result.txt
+*_result.json
+logs
+responses
